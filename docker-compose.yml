@@ -1,0 +1,67 @@
+version: "3.4"
+
+services:
+  server:
+    image: node:14
+    command: >
+      bash -c "cd /app && npx nodemon bin/www"
+    restart: always
+    environment:
+      - PORT=3001
+    volumes:
+      - ./server:/app/
+    depends_on:
+      - kafka
+      - zookeeper
+    scale: 3
+  
+  client:
+    image: node:14
+    container_name: client
+    command: >
+      bash -c "cd /app && npm start"
+    restart: always
+    environment:
+      - PORT=3000
+    ports:
+      - 3000:3000
+    volumes:
+      - ./client:/app/
+    depends_on:
+      - server
+  
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+  
+  kafka:
+    image: wurstmeister/kafka:2.11-1.1.1
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    links:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://kafka:19092,LISTENER_DOCKER_EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,LISTENER_DOCKER_EXTERNAL://127.0.0.1:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - ../data/kafka/data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
+  
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports: 
+      - "8080:8080"
+    depends_on:
+      - server
